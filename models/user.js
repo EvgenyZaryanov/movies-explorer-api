@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema(
     toJSON: { useProjection: true },
     toObject: { useProjection: true },
     versionKey: false,
-  }
+  },
 );
 
 userSchema.statics.findUserByCredentials = function findOne(email, password) {
@@ -41,13 +41,13 @@ userSchema.statics.findUserByCredentials = function findOne(email, password) {
     .then((user) => {
       if (!user) {
         return Promise.reject(
-          new UnauthorizedError("Неверные почта или пароль")
+          new UnauthorizedError("Неверные почта или пароль"),
         );
       }
       return bcrypt.compare(password, user.password).then((matched) => {
         if (!matched) {
           return Promise.reject(
-            new UnauthorizedError("Неверные почта или пароль")
+            new UnauthorizedError("Неверные почта или пароль"),
           );
         }
         return user;
