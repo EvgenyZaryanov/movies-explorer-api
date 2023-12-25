@@ -1,45 +1,47 @@
-// Модуль dotenv для добавления переменных окружения в process.env
-require("dotenv").config();
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const { celebrate, Joi, errors } = require('celebrate');
+const auth = require('./middlewares/auth');
+const errorHandler = require('./middlewares/errorHandler');
+const { createUser, login } = require('./controllers/users');
+const { requestLogger, errorLogger } = require('./middlewares/logger');
 
-const express = require("express");
-const mongoose = require("mongoose");
-
-const cors = require("cors");
-const { errors } = require("celebrate");
-const helmet = require("helmet");
-const errorHandler = require("./middlewares/errorHandler");
-const limiter = require("./middlewares/limiter");
-const { requestLogger, errorLogger } = require("./middlewares/logger");
-
-const { PORT = 3000, MONGO_URL = "mongodb://127.0.0.1:27017/bitfilmsdb" } = process.env;
-
-const appRouter = require("./routes/index");
+const { PORT = 3000, DB_URL = 'mongodb://127.0.0.1:27017/bitfilmsdb' } = process.env;
 
 const app = express();
-mongoose.connect(MONGO_URL, {
-  useNewUrlParser: true,
-});
-console.log("Соединение с сервером установлено");
 
-// безопасность
 app.use(cors());
-app.use(limiter);
-app.use(helmet());
-
-// парсинг
-app.use(express.json()); // сборка JSON-формата
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// миддлвэр-логгер запросов
+mongoose.connect(DB_URL);
+
 app.use(requestLogger);
 
-// роутер
-app.use(appRouter);
+app.post('/signin', celebrate({
+  body: Joi.object().keys({
+    email: Joi.string().required().email(),
+    password: Joi.string().required(),
+  }),
+}), login);
 
-// обработка ошибок
-app.use(errorLogger); // логгер ошибок
-app.use(errors()); // обработчик ошибок celebrate
-app.use(errorHandler); // централизолванная обработка ошибок
+app.use('/signup', celebrate({
+  body: Joi.object().keys({
+    email: Joi.string().required().email(),
+    password: Joi.string().required(),
+    name: Joi.string().min(2).max(30),
+  }),
+}), createUser);
+
+app.use(auth);
+app.use('/users', require('./routes/users'));
+app.use('/movies', require('./routes/movies'));
+
+app.use(errorLogger);
+
+app.use(errors());
+
+app.use(errorHandler);
 
 app.listen(PORT);
-console.log(`App listening on port ${PORT}`);

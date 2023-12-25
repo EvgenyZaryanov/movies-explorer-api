@@ -1,8 +1,16 @@
 {
-  "extends": "airbnb-base",
+  "extends": [
+    "airbnb-base"
+  ],
   "rules": {
-    "no-underscore-dangle": ["error", { "allow": ["_id"] }],
-    "quotes": [0, "double"],
-    "no-console": ["error", { "allow": ["log"] }]
+    "no-console": "off",
+    "no-underscore-dangle": [
+      "error",
+      {
+        "allow": ["_id"]
+      }
+    ],
+    "import/extensions": "off",
+    "import/prefer-default-export": "off"
   }
 }

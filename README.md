@@ -1,9 +1,12 @@
 # movies-explorer-api
 
-First part of my diploma project (backend)
+Бэкенд-часть дипломной работы movies-explorer-api
 
-## Ссылки на проект
+В проекте реализованы возможности:
+
+- Регистрации
+- Авторизации
+- Публикации фильмов пользователями
 
 IP 158.160.115.22
-
-Backend https://api.zarmovies.nomoredomainsmonster.ru/
+URL https://api.zarmovies.nomoredomainsmonster.ru
