@@ -1,130 +1,70 @@
-// const { NODE_ENV, JWT_SECRET } = process.env;
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
+require('dotenv').config();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/user');
+const NotFoundError = require('../errors/NotFoundError');
+const BadRequestError = require('../errors/BadRequestError');
+const ConflictError = require('../errors/ConflictError');
 
-const UserModel = require("../models/user");
-const httpCode = require("../utils/httpCode");
+const { NODE_ENV, JWT_SECRET } = process.env;
 
-const NotFoundError = require("../errors/NotFoundError");
-const BadRequestError = require("../errors/BadRequestError");
-const ConflictError = require("../errors/ConflictError");
+function throwUserError(err) {
+  if (err.name === 'ValidationError' || err.name === 'CastError') {
+    return new BadRequestError('Переданы некорректные данные');
+  }
+  if (err.code === 11000) {
+    return new ConflictError('Пользователь уже зарегестрирован');
+  }
+  return err;
+}
 
-const getUsers = (req, res, next) => {
-  UserModel.find({})
-    .then((users) => res.send(users))
-    .catch(next);
-};
-
-const getCurrentUser = (req, res, next) => {
-  UserModel.findOne({ _id: req.user._id })
+module.exports.getUserInfo = (req, res, next) => {
+  User.findById(req.user._id)
+    .orFail(new NotFoundError('Пользователь не найден'))
     .then((user) => res.send(user))
-    .catch(next);
+    .catch((err) => next(throwUserError(err)));
 };
 
-const getUserById = (req, res, next) => {
-  UserModel.findById(req.params.userId)
-    .orFail(() => new NotFoundError("Пользователь с указанным id не найден"))
-    .then((user) => res.send(user))
-    .catch((err) => {
-      if (err.name === "CastError") {
-        next(new BadRequestError("Такого пользователя не существует"));
-        return;
-      }
-      if (err.message === "NotFound") {
-        next(new NotFoundError("Некорректный id пользователя"));
-        return;
-      }
-      next(err);
-    });
-};
-
-const createUser = (req, res, next) => {
-  const { name, email, password } = req.body;
-  bcrypt
-    .hash(password, 10)
-    .then((hash) => UserModel.create({
-      name,
-      email,
-      password: hash,
-    }))
+module.exports.createUser = (req, res, next) => {
+  const { email, password, name } = req.body;
+  bcrypt.hash(password, 10)
+    .then((hash) => User.create({ email, password: hash, name }))
     .then((user) => {
       const userWithoutPassword = user.toObject();
       delete userWithoutPassword.password;
-      res.status(httpCode.STATUS_CREATED).send(userWithoutPassword);
+      res.status(201).send(userWithoutPassword);
     })
-    .catch((err) => {
-      if (err.code === 11000) {
-        next(
-          new ConflictError("Пользователь с таким email уже зарегистрирован"),
-        );
-        return;
-      }
-      if (err.name === "ValidationError") {
-        next(
-          new BadRequestError(
-            "Переданы некорректные данные при создании пользователя",
-          ),
-        );
-        return;
-      }
-      next(err);
-    });
+    .catch((err) => next(throwUserError(err)));
 };
 
-const updateUser = (req, res, next) => {
-  const { name, email } = req.body;
-
-  UserModel.findByIdAndUpdate(
+module.exports.updateUser = (req, res, next) => {
+  const { email, name } = req.body;
+  User.findByIdAndUpdate(
     req.user._id,
-    { name, email },
-    { new: true, runValidators: true },
+    { email, name },
+    {
+      new: true,
+      runValidators: true,
+    },
   )
-    .orFail(() => new NotFoundError("Пользователь с указанным id не найден"))
-    .then((data) => {
-      res.send(data);
-    })
-    .catch((err) => {
-      if (err.code === 11000) {
-        next(
-          new ConflictError("Пользователь с таким email уже зарегистрирован"),
-        );
-        return;
-      }
-      if (err.name === "ValidationError") {
-        next(
-          new BadRequestError(
-            "Переданы некорректные данные при обновлении профиля",
-          ),
-        );
-        return;
-      }
-      next(err);
-    });
+    .then((user) => res.send(user))
+    .catch((err) => next(throwUserError(err)));
 };
 
-const login = (req, res, next) => {
+module.exports.login = (req, res, next) => {
   const { email, password } = req.body;
 
-  UserModel.findUserByCredentials(email, password)
+  User.findUserByCredentials(email, password)
     .then((user) => {
-      const token = jwt.sign(
+      const authorizationToken = jwt.sign(
         { _id: user._id },
-        process.env.NODE_ENV === "production"
-          ? process.env.JWT_SECRET
-          : "super_secret_key",
-        { expiresIn: "7d" },
-        null,
+        NODE_ENV === 'production' ? JWT_SECRET : 'super-strong-secret',
+        { expiresIn: '7d' },
       );
-      res.send({ token });
-    })
-    .catch(next);
-};
 
-module.exports = {
-  getUsers,
-  getCurrentUser,
-  getUserById,
-  createUser,
-  updateUser,
-  login,
+      res.send({ token: authorizationToken });
+    })
+    .catch((err) => {
+      next(err);
+    });
 };
