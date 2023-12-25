@@ -6,4 +6,4 @@ First part of my diploma project (backend)
 
 IP 158.160.115.22
 
-Backend https://api.zaryanov-movies.nomoredomainsmonster.ru/
+Backend https://api.zarmovies.nomoredomainsmonster.ru/
