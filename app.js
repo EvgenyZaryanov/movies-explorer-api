@@ -18,7 +18,7 @@ mongoose.connect(DB_URL);
 
 app.use(helmet());
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
 app.use(requestLogger);
 app.use(limiter);
@@ -35,4 +35,4 @@ app.use(errorLogger);
 app.use(errors());
 app.use(ServerError);
 
-app.listen(PORT);
+app.listen(PORT, (error) => (error ? console.log(`Ошибка: ${error}`) : console.log(`Подключено: ${PORT}`)));
