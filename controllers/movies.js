@@ -1,23 +1,13 @@
-const Movie = require('../models/movie');
-const NotFoundError = require('../errors/NotFoundError');
-const BadRequestError = require('../errors/BadRequestError');
-const ForbiddenError = require('../errors/ForbiddenError');
+const Movies = require('../models/movies');
 
-function throwMovieError(err) {
-  if (err.name === 'ValidationError' || err.name === 'CastError') {
-    return new BadRequestError('Переданы некорректные данные');
-  }
-  return err;
-}
+const OK = 200;
+const CREATED = 201;
 
-module.exports.getUserMovies = (req, res, next) => {
-  Movie.find({ owner: req.user._id })
-    .orFail(new NotFoundError('Не найдены фильмы пользователя'))
-    .then((movies) => res.send(movies))
-    .catch((err) => (next(throwMovieError(err))));
-};
+const NotFound = require('../errors/not_found'); // 404
+const Forbidden = require('../errors/forbidden'); // 403
+const BadRequest = require('../errors/bad-request'); // 400
 
-module.exports.createMovie = (req, res, next) => {
+const createMovie = (req, res, next) => {
   const {
     country,
     director,
@@ -32,7 +22,7 @@ module.exports.createMovie = (req, res, next) => {
     nameEN,
   } = req.body;
 
-  Movie.create({
+  const addMovie = new Movies({
     country,
     director,
     duration,
@@ -41,24 +31,51 @@ module.exports.createMovie = (req, res, next) => {
     image,
     trailerLink,
     thumbnail,
-    owner: req.user._id,
     movieId,
     nameRU,
     nameEN,
-  })
-    .then((movie) => res.status(201).send(movie))
-    .catch((err) => next(throwMovieError(err)));
+    owner: req.user._id,
+  });
+
+  addMovie.save()
+    .then((savedFilm) => {
+      res.status(CREATED).send(savedFilm);
+    })
+    .catch((error) => {
+      next(error);
+    });
 };
 
-module.exports.deleteMovie = (req, res, next) => {
-  Movie.findOne({ movieId: req.params.movieId })
-    .orFail(new NotFoundError('Фильм не найден'))
-    .then((movie) => {
-      if (movie.owner.toString() !== req.user._id.toString()) {
-        throw new ForbiddenError('Вы не являетесь владельцем фильма');
+const getMovies = (req, res, next) => {
+  Movies.find({ owner: req.user._id })
+    .then((movies) => res.status(OK).send(movies))
+    .catch((error) => {
+      next(error);
+    });
+};
+
+const deleteMovie = (req, res, next) => {
+  const { movieId } = req.params;
+  Movies.findById(movieId)
+    .orFail(new NotFound('Такого фильма не существует!'))
+    .then((film) => {
+      if (!film.owner.equals(req.user._id)) {
+        return next(new Forbidden('Нельзя удалить чужой фильм'));
       }
-      return Movie.deleteOne(movie);
+      return film.deleteOne()
+        .then(() => res.send(film));
     })
-    .then((movie) => res.status(200).send(movie))
-    .catch((err) => next(throwMovieError(err)));
+    .catch((error) => {
+      if (error.name === 'CastError') {
+        next(new BadRequest('Некорректный ID фильма'));
+      } else {
+        next(error);
+      }
+    });
+};
+
+module.exports = {
+  getMovies,
+  createMovie,
+  deleteMovie,
 };

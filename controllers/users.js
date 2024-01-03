@@ -1,70 +1,95 @@
-require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/user');
-const NotFoundError = require('../errors/NotFoundError');
-const BadRequestError = require('../errors/BadRequestError');
-const ConflictError = require('../errors/ConflictError');
+const Users = require('../models/users');
 
-const { NODE_ENV, JWT_SECRET } = process.env;
+const NotFound = require('../errors/not_found'); // 404
+const Conflict = require('../errors/conflict'); // 409
+const BadRequest = require('../errors/bad-request'); // 400
 
-function throwUserError(err) {
-  if (err.name === 'ValidationError' || err.name === 'CastError') {
-    return new BadRequestError('Переданы некорректные данные');
-  }
-  if (err.code === 11000) {
-    return new ConflictError('Пользователь уже зарегестрирован');
-  }
-  return err;
-}
+const { SECRET_KEY, NODE_ENV } = process.env;
 
-module.exports.getUserInfo = (req, res, next) => {
-  User.findById(req.user._id)
-    .orFail(new NotFoundError('Пользователь не найден'))
-    .then((user) => res.send(user))
-    .catch((err) => next(throwUserError(err)));
-};
+const OK = 200;
+const CREATED = 201;
 
-module.exports.createUser = (req, res, next) => {
-  const { email, password, name } = req.body;
-  bcrypt.hash(password, 10)
-    .then((hash) => User.create({ email, password: hash, name }))
-    .then((user) => {
-      const userWithoutPassword = user.toObject();
-      delete userWithoutPassword.password;
-      res.status(201).send(userWithoutPassword);
-    })
-    .catch((err) => next(throwUserError(err)));
-};
+const SALT_ROUNDS = 10;
 
-module.exports.updateUser = (req, res, next) => {
-  const { email, name } = req.body;
-  User.findByIdAndUpdate(
-    req.user._id,
-    { email, name },
-    {
-      new: true,
-      runValidators: true,
-    },
-  )
-    .then((user) => res.send(user))
-    .catch((err) => next(throwUserError(err)));
-};
-
-module.exports.login = (req, res, next) => {
+const login = (req, res, next) => {
   const { email, password } = req.body;
-
-  User.findUserByCredentials(email, password)
+  return Users.findUserByCredentials(email, password)
     .then((user) => {
-      const authorizationToken = jwt.sign(
-        { _id: user._id },
-        NODE_ENV === 'production' ? JWT_SECRET : 'super-strong-secret',
-        { expiresIn: '7d' },
-      );
-
-      res.send({ token: authorizationToken });
+      const token = jwt.sign({ _id: user._id }, NODE_ENV === 'production' ? SECRET_KEY : 'dev-secret', { expiresIn: '7d' });
+      return res.status(OK).cookie('jwt', token, {
+        maxAge: 3600000 * 24 * 7, httpOnly: true, sameSite: 'none', secure: true,
+      }).send({
+        email: user.email,
+        _id: user._id,
+        name: user.name,
+      });
     })
-    .catch((err) => {
-      next(err);
+    .catch(next);
+};
+
+const singOut = (req, res) => {
+  res.clearCookie('jwt').send({ message: 'Выход' });
+  res.end();
+};
+
+const createUser = (req, res, next) => {
+  const {
+    name, email, password,
+  } = req.body;
+  bcrypt.hash(password, SALT_ROUNDS)
+    .then((hash) => Users.create({
+      name, email, password: hash,
+    }))
+    .then((data) => res.status(CREATED).send({
+      name: data.name, email: data.email,
+    }))
+    .catch((error) => {
+      if (error.name === 'ValidationError') {
+        next(new BadRequest('Переданы некорректные данные пользователя'));
+      } else if (error.code === 11000) {
+        next(new Conflict('Такой пользователь уже существует!'));
+      } else {
+        next(error);
+      }
     });
+};
+
+const getUser = (req, res, next) => {
+  Users.findById(req.user._id)
+    .then((user) => {
+      res.status(OK).send(user);
+    })
+    .catch(next);
+};
+
+const updateUser = (req, res, next) => {
+  const { name, email } = req.body;
+  const userID = req.user._id;
+  Users.findByIdAndUpdate(userID, { name, email }, { new: true, runValidators: true })
+    .then((user) => {
+      if (user === null) {
+        next(new NotFound('Пользователь по указанному _id не найден.'));
+      } else {
+        res.send({ data: user });
+      }
+    })
+    .catch((error) => {
+      if (error.name === 'ValidationError') {
+        next(new BadRequest('Переданы некорректные данные при обновлении профиля'));
+      } else if (error.code === 11000) {
+        next(new Conflict('Такой пользователь уже существует!'));
+      } else {
+        next(error);
+      }
+    });
+};
+
+module.exports = {
+  getUser,
+  login,
+  createUser,
+  singOut,
+  updateUser,
 };
