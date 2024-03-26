@@ -8,5 +8,5 @@
 - Авторизации
 - Публикации фильмов пользователями
 
-IP 158.160.115.22
+IP 158.160.24.68
 URL https://api.zarmovies.nomoredomainsmonster.ru
